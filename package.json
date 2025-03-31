@@ -2,15 +2,26 @@
   "name": "@uratmangun/ai-custodial-wallet",
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix"
+  },
   "devDependencies": {
+    "@eslint/js": "^9.23.0",
     "@types/bun": "latest",
-    "@types/node": "^22.13.14"
+    "@types/node": "^22.13.14",
+    "@typescript-eslint/eslint-plugin": "^8.28.0",
+    "@typescript-eslint/parser": "^8.28.0",
+    "eslint": "^9.23.0"
   },
   "peerDependencies": {
     "typescript": "^5.8.2"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
+    "@types/nedb": "^1.8.16",
+    "dotenv": "^16.4.7",
+    "nedb": "^1.8.0",
     "zod": "^3.24.2"
   }
 }

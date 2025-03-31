@@ -1,5 +1,15 @@
 {
   "mcpServers": {
-   
+    "ai-custodial-wallet": {
+      "command": "bun",
+      "args": ["run", "/home/uratmangun/CascadeProjects/ai-custodial-wallet/index.ts"],
+      "env": {
+        "DATABASE_PATH": "/home/uratmangun/CascadeProjects/ai-custodial-wallet/data/wallets.db",
+        "NODE_ENV": "development",
+        "API_KEY": "${API_KEY}",
+        "DEFAULT_WALLET_TYPE": "hot",
+        "MAX_WALLETS_PER_USER": "5"
+      }
+    }
   }
 }

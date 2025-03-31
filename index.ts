@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
-
+import { createWallet, createWalletParams } from "./tools/create_wallet.js";
 
 // Create server instance
 const server = new McpServer({
@@ -12,33 +11,18 @@ const server = new McpServer({
   },
 });
 
+
 server.tool(
-  "GET_FORECAST",
-  "Get weather forecast for a location",
-  {
-    random_string: z.string().optional().describe("Dummy parameter for no-parameter tools")
-  },
-  async ({random_string}) => {
-    // Mock weather forecast response
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Current Weather Forecast:
-Temperature: 22°C
-Condition: Partly cloudy
-Humidity: 65%
-Wind: 10 km/h`,
-        },
-      ],
-    };
-  },
+  "CREATE_WALLET",
+  "Create a new wallet for a user",
+  createWalletParams,
+  createWallet
 );
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Weather MCP Server running on stdio");
+  console.log("MCP Server running on stdio");
 }
 
 main().catch((error) => {
