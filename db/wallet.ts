@@ -5,7 +5,6 @@ import { join } from 'path';
 export interface Wallet {
   _id?: string;
   userId: string;
-  walletType: 'hot' | 'cold';
   address: string;
   createdAt: Date;
   updatedAt: Date;
@@ -16,7 +15,7 @@ class WalletDB {
 
   constructor() {
     this.db = new Datastore({
-      filename: join(process.cwd(), 'data', 'wallets.db'),
+      filename: join(process.cwd(), 'data', 'data.db'),
       autoload: true,
       timestampData: true
     });
