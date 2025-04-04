@@ -23,3 +23,10 @@ export function generate_secret(): {
 }
 
 // Execute if this is the main module
+if (import.meta.main) {
+  const { secret } = generate_secret();
+  console.log('Generated SECRET:');
+  console.log(secret);
+  console.log('\nPlease add this to your .env file as:');
+  console.log(`SECRET=${secret}`);
+}

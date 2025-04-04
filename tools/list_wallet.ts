@@ -7,10 +7,12 @@ dotenv.config()
 // Create wallet database instance
 const walletDB = createDB('wallet')
 
-export async function list_wallet(): Promise<Array<{ 
-    id: string; 
-    publicKey: string;
-}>> {
+export async function list_wallet(): Promise<{
+    wallets: Array<{
+        id: string;
+        publicKey: string;
+    }>
+}> {
     // Check if SECRET exists
     if (!process.env.SECRET) {
         throw new Error('❌ SECRET environment variable is not set. Please run generate_secret() first to create a secret key.')
@@ -20,8 +22,8 @@ export async function list_wallet(): Promise<Array<{
     const wallets = await walletDB.getAll()
     
     // Return only id and publicKey
-    return wallets.map(wallet => ({
+    return {wallets:wallets.length === 0 ? [] : wallets.map(wallet => ({
         id: wallet.id,
         publicKey: wallet.publicKey
-    }))
+    }))}
 }

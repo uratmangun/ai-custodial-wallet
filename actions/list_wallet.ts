@@ -15,12 +15,19 @@ const listWalletAction = {
         input: {},
         output: {
           status: "success",
-          id: "1234567890123456789012345678901234567890",
-          publicKey: "0x1234567890123456789012345678901234567890",
-          createdAt: "2021-01-01T00:00:00.000Z",
-          updatedAt: "2021-01-01T00:00:00.000Z"
+        wallets:[{id:"1234567890123456789012345678901234567890",publicKey:"0x1234567890123456789012345678901234567890"}]
         },
         explanation: "List all wallets",
+      },
+    ],
+    [
+      {
+        input: {},
+        output: {
+          status: "success",
+        wallets:[]
+        },
+        explanation: "No wallets found",
       },
     ],
    

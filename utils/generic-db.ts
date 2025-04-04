@@ -37,7 +37,15 @@ class GenericDB {
 
   constructor(collectionName: string) {
     this.collectionName = collectionName;
-    this.dbPath = join('data', `${collectionName}.db`);
+    
+    // Create data directory if it doesn't exist
+    const dataDir = 'data';
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      console.log('📁 Created data directory');
+    }
+
+    this.dbPath = join(dataDir, `${collectionName}.db`);
     
     // Get encryption key from environment
     const secret = process.env.SECRET;
@@ -47,23 +55,23 @@ class GenericDB {
     this.encryptionKey = Buffer.from(secret, 'hex');
 
     try {
-      // Ensure data directory exists
-      if (!fs.existsSync('data')) {
-        fs.mkdirSync('data', { recursive: true });
-        console.log('📁 Created data directory');
-      }
+      // Initialize in-memory database
+      this.db = new Datastore({ inMemoryOnly: true });
 
-      // Check if database file exists, if not create it
-      if (!fs.existsSync(this.dbPath)) {
+      // Load data from file if it exists
+      if (fs.existsSync(this.dbPath)) {
+        const data = fs.readFileSync(this.dbPath, 'utf8');
+        if (data) {
+          const records = data.split('\n').filter(Boolean).map(line => JSON.parse(line));
+          records.forEach(record => {
+            this.db.insert(record);
+          });
+        }
+      } else {
+        // Create empty database file
         fs.writeFileSync(this.dbPath, '');
         console.log(`📄 Created database file: ${this.dbPath}`);
       }
-
-      this.db = new Datastore({
-        filename: this.dbPath,
-        autoload: true,
-        timestampData: true
-      });
 
       // Ensure indices for common fields
       this.db.ensureIndex({ fieldName: 'id', unique: true });
@@ -71,6 +79,24 @@ class GenericDB {
       console.error('❌ Error initializing database:', error);
       throw new Error(`Failed to initialize database: ${error.message}`);
     }
+  }
+
+  private async syncToFile(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.find({}, (err: Error | null, docs: any[]) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        try {
+          const data = docs.map(doc => JSON.stringify(doc)).join('\n') + '\n';
+          fs.writeFileSync(this.dbPath, data, 'utf8');
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
   }
 
   private encrypt(data: any): string {
@@ -82,12 +108,28 @@ class GenericDB {
   }
 
   private decrypt(encryptedData: string): any {
-    const [ivHex, encrypted] = encryptedData.split(':');
-    const iv = Buffer.from(ivHex, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', this.encryptionKey, iv);
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return JSON.parse(decrypted);
+    if (!encryptedData) {
+      console.warn('Warning: Attempted to decrypt undefined or null data');
+      return null;
+    }
+
+    try {
+      const parts = encryptedData.split(':');
+      if (parts.length !== 2) {
+        console.warn('Warning: Invalid encrypted data format');
+        return null;
+      }
+
+      const [ivHex, encrypted] = parts;
+      const iv = Buffer.from(ivHex, 'hex');
+      const decipher = crypto.createDecipheriv('aes-256-cbc', this.encryptionKey, iv);
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return JSON.parse(decrypted);
+    } catch (error) {
+      console.error('Error decrypting data:', error);
+      return null;
+    }
   }
 
   // Create a new document
@@ -103,11 +145,17 @@ class GenericDB {
     const encryptedData = this.encrypt(document);
 
     return new Promise((resolve, reject) => {
-      this.db.insert({ encryptedData }, (err: Error | null, newDoc: any) => {
-        if (err) reject(err);
-        else {
+      this.db.insert({ encryptedData }, async (err: Error | null, newDoc: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        try {
+          await this.syncToFile();
           const decryptedDoc = this.decrypt(newDoc.encryptedData);
           resolve(decryptedDoc);
+        } catch (error) {
+          reject(error);
         }
       });
     });
@@ -117,11 +165,20 @@ class GenericDB {
   async getById<T extends Document>(id: string): Promise<T | null> {
     return new Promise((resolve, reject) => {
       this.db.findOne({ id }, (err: Error | null, doc: any) => {
-        if (err) reject(err);
-        else if (!doc) resolve(null);
-        else {
+        if (err) {
+          reject(err);
+          return;
+        }
+        if (!doc || !doc.encryptedData) {
+          resolve(null);
+          return;
+        }
+        try {
           const decryptedDoc = this.decrypt(doc.encryptedData);
           resolve(decryptedDoc);
+        } catch (error) {
+          console.error('Error decrypting document:', error);
+          resolve(null);
         }
       });
     });
@@ -131,10 +188,19 @@ class GenericDB {
   async getAll<T extends Document>(): Promise<T[]> {
     return new Promise((resolve, reject) => {
       this.db.find({}, (err: Error | null, docs: any[]) => {
-        if (err) reject(err);
-        else {
-          const decryptedDocs = docs.map(doc => this.decrypt(doc.encryptedData));
+        if (err) {
+          reject(err);
+          return;
+        }
+        try {
+          const decryptedDocs = docs
+            .filter(doc => doc && doc.encryptedData)
+            .map(doc => this.decrypt(doc.encryptedData))
+            .filter(doc => doc !== null);
           resolve(decryptedDocs);
+        } catch (error) {
+          console.error('Error decrypting documents:', error);
+          resolve([]);
         }
       });
     });
@@ -159,12 +225,20 @@ class GenericDB {
   async find<T extends Document>(query: Query): Promise<T[]> {
     return new Promise((resolve, reject) => {
       this.db.find({}, (err: Error | null, docs: any[]) => {
-        if (err) reject(err);
-        else {
+        if (err) {
+          reject(err);
+          return;
+        }
+        try {
           const decryptedDocs = docs
+            .filter(doc => doc && doc.encryptedData)
             .map(doc => this.decrypt(doc.encryptedData))
+            .filter(doc => doc !== null)
             .filter(doc => this.applyQueryFilter(doc, query));
           resolve(decryptedDocs);
+        } catch (error) {
+          console.error('Error finding documents:', error);
+          resolve([]);
         }
       });
     });
@@ -178,24 +252,37 @@ class GenericDB {
     };
 
     return new Promise((resolve, reject) => {
-      this.db.findOne({ id }, (err: Error | null, doc: any) => {
-        if (err) reject(err);
-        else if (!doc) resolve(null);
-        else {
-          const decryptedDoc = this.decrypt(doc.encryptedData);
-          const updatedDoc = { ...decryptedDoc, ...updateData };
-          const encryptedData = this.encrypt(updatedDoc);
-          
-          this.db.update(
-            { id },
-            { $set: { encryptedData } },
-            { returnUpdatedDocs: true },
-            (err: Error | null, numAffected: number, affectedDocuments: any) => {
-              if (err) reject(err);
-              else resolve(updatedDoc);
-            }
-          );
+      this.db.findOne({ id }, async (err: Error | null, doc: any) => {
+        if (err) {
+          reject(err);
+          return;
         }
+        if (!doc) {
+          resolve(null);
+          return;
+        }
+        
+        const decryptedDoc = this.decrypt(doc.encryptedData);
+        const updatedDoc = { ...decryptedDoc, ...updateData };
+        const encryptedData = this.encrypt(updatedDoc);
+        
+        this.db.update(
+          { id },
+          { $set: { encryptedData } },
+          { returnUpdatedDocs: true },
+          async (err: Error | null, numAffected: number, affectedDocuments: any) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            try {
+              await this.syncToFile();
+              resolve(updatedDoc);
+            } catch (error) {
+              reject(error);
+            }
+          }
+        );
       });
     });
   }
@@ -203,9 +290,17 @@ class GenericDB {
   // Delete document
   async delete(id: string): Promise<number> {
     return new Promise((resolve, reject) => {
-      this.db.remove({ id }, {}, (err: Error | null, numRemoved: number) => {
-        if (err) reject(err);
-        else resolve(numRemoved);
+      this.db.remove({ id }, {}, async (err: Error | null, numRemoved: number) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        try {
+          await this.syncToFile();
+          resolve(numRemoved);
+        } catch (error) {
+          reject(error);
+        }
       });
     });
   }
@@ -213,9 +308,17 @@ class GenericDB {
   // Delete multiple documents by query
   async deleteMany(query: any): Promise<number> {
     return new Promise((resolve, reject) => {
-      this.db.remove(query, { multi: true }, (err: Error | null, numRemoved: number) => {
-        if (err) reject(err);
-        else resolve(numRemoved);
+      this.db.remove(query, { multi: true }, async (err: Error | null, numRemoved: number) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        try {
+          await this.syncToFile();
+          resolve(numRemoved);
+        } catch (error) {
+          reject(error);
+        }
       });
     });
   }
