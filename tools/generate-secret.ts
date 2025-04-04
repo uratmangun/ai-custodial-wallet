@@ -10,13 +10,16 @@ function generateSecretKey(): string {
 export function generate_secret(): {
   secret: string;
   createdAt: Date;
+
 } {
+
   const secretKey = generateSecretKey();
   const now = new Date();
   
 
   
   return {
+    
     secret: secretKey,
     createdAt: now
   };

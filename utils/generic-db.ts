@@ -39,13 +39,14 @@ class GenericDB {
     this.collectionName = collectionName;
     
     // Create data directory if it doesn't exist
-    const dataDir = 'data';
+    const dataDir = join(process.cwd(), 'data');
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
       console.log('📁 Created data directory');
     }
 
-    this.dbPath = join(dataDir, `${collectionName}.db`);
+    const dbPath = join(dataDir, `${collectionName}.db`);
+    this.dbPath = dbPath;
     
     // Get encryption key from environment
     const secret = process.env.SECRET;
@@ -55,80 +56,67 @@ class GenericDB {
     this.encryptionKey = Buffer.from(secret, 'hex');
 
     try {
-      // Initialize in-memory database
-      this.db = new Datastore({ inMemoryOnly: true });
-
-      // Load data from file if it exists
-      if (fs.existsSync(this.dbPath)) {
-        const data = fs.readFileSync(this.dbPath, 'utf8');
-        if (data) {
-          const records = data.split('\n').filter(Boolean).map(line => JSON.parse(line));
-          records.forEach(record => {
-            this.db.insert(record);
-          });
+      // Initialize database with encryption hooks
+      this.db = new Datastore({
+        filename: this.dbPath,
+        autoload: true, // Autoload handles creation/loading
+        onload: (err) => { // Handle autoload errors
+          if (err) {
+            console.error(`❌ Error auto-loading database ${this.dbPath}:`, err);
+            // Re-throw to signal a critical failure during startup
+            throw new Error(`Failed to load database: ${err.message}`);
+          } else {
+            console.log(`✅ Database loaded successfully: ${this.dbPath}`);
+            // Ensure indices after successful load
+            this.db.ensureIndex({ fieldName: 'id', unique: true }, (indexErr) => {
+              if (indexErr) {
+                console.error(`❌ Error setting index on 'id':`, indexErr);
+                // Decide if this is fatal or just a warning
+              }
+            });
+          }
+        },
+        // Add serialization hooks for encryption
+        afterSerialization: (plaintext: string) => {
+          const iv = crypto.randomBytes(16);
+          const cipher = crypto.createCipheriv('aes-256-cbc', this.encryptionKey, iv);
+          let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+          encrypted += cipher.final('hex');
+          return `${iv.toString('hex')}:${encrypted}`;
+        },
+        // Add deserialization hooks for decryption
+        beforeDeserialization: (ciphertext: string) => {
+          // nedb passes an empty string for an empty file
+          if (ciphertext === '') {
+            return '';
+          }
+          try {
+            const parts = ciphertext.split(':');
+            if (parts.length !== 2) {
+              throw new Error('Invalid encrypted data format (expected "iv:encryptedData").');
+            }
+            const [ivHex, encrypted] = parts;
+            const iv = Buffer.from(ivHex, 'hex');
+            if (iv.length !== 16) {
+              throw new Error(`Invalid IV length: ${iv.length}. Expected 16 bytes.`);
+            }
+            const decipher = crypto.createDecipheriv('aes-256-cbc', this.encryptionKey, iv);
+            let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+            decrypted += decipher.final('utf8');
+            return decrypted;
+          } catch (error: any) {
+            console.error('❌ Error decrypting or parsing database entry:', error);
+            // Throwing an error signals nedb that loading this line failed
+            throw new Error(`Decryption/parsing failed: ${error.message}`);
+          }
         }
-      } else {
-        // Create empty database file
-        fs.writeFileSync(this.dbPath, '');
-        console.log(`📄 Created database file: ${this.dbPath}`);
-      }
+      });
 
-      // Ensure indices for common fields
-      this.db.ensureIndex({ fieldName: 'id', unique: true });
+      // Indices are now ensured within the onload callback
+
     } catch (error: any) {
       console.error('❌ Error initializing database:', error);
       throw new Error(`Failed to initialize database: ${error.message}`);
-    }
-  }
-
-  private async syncToFile(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.find({}, (err: Error | null, docs: any[]) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        try {
-          const data = docs.map(doc => JSON.stringify(doc)).join('\n') + '\n';
-          fs.writeFileSync(this.dbPath, data, 'utf8');
-          resolve();
-        } catch (error) {
-          reject(error);
-        }
-      });
-    });
-  }
-
-  private encrypt(data: any): string {
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv('aes-256-cbc', this.encryptionKey, iv);
-    let encrypted = cipher.update(JSON.stringify(data), 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    return `${iv.toString('hex')}:${encrypted}`;
-  }
-
-  private decrypt(encryptedData: string): any {
-    if (!encryptedData) {
-      console.warn('Warning: Attempted to decrypt undefined or null data');
-      return null;
-    }
-
-    try {
-      const parts = encryptedData.split(':');
-      if (parts.length !== 2) {
-        console.warn('Warning: Invalid encrypted data format');
-        return null;
-      }
-
-      const [ivHex, encrypted] = parts;
-      const iv = Buffer.from(ivHex, 'hex');
-      const decipher = crypto.createDecipheriv('aes-256-cbc', this.encryptionKey, iv);
-      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-      return JSON.parse(decrypted);
-    } catch (error) {
-      console.error('Error decrypting data:', error);
-      return null;
     }
   }
 
@@ -139,24 +127,15 @@ class GenericDB {
       ...data,
       createdAt: now,
       updatedAt: now
-    } as unknown as T;
-
-    // Encrypt the document data
-    const encryptedData = this.encrypt(document);
+    } as unknown as T;  // Safe to cast as we're adding the required fields
 
     return new Promise((resolve, reject) => {
-      this.db.insert({ encryptedData }, async (err: Error | null, newDoc: any) => {
+      this.db.insert(document, (err: Error | null, newDoc: T) => {
         if (err) {
           reject(err);
           return;
         }
-        try {
-          await this.syncToFile();
-          const decryptedDoc = this.decrypt(newDoc.encryptedData);
-          resolve(decryptedDoc);
-        } catch (error) {
-          reject(error);
-        }
+        resolve(newDoc);
       });
     });
   }
@@ -164,22 +143,12 @@ class GenericDB {
   // Get document by ID
   async getById<T extends Document>(id: string): Promise<T | null> {
     return new Promise((resolve, reject) => {
-      this.db.findOne({ id }, (err: Error | null, doc: any) => {
+      this.db.findOne({ id }, (err: Error | null, doc: T | null) => {
         if (err) {
           reject(err);
           return;
         }
-        if (!doc || !doc.encryptedData) {
-          resolve(null);
-          return;
-        }
-        try {
-          const decryptedDoc = this.decrypt(doc.encryptedData);
-          resolve(decryptedDoc);
-        } catch (error) {
-          console.error('Error decrypting document:', error);
-          resolve(null);
-        }
+        resolve(doc);
       });
     });
   }
@@ -187,59 +156,25 @@ class GenericDB {
   // Get all documents
   async getAll<T extends Document>(): Promise<T[]> {
     return new Promise((resolve, reject) => {
-      this.db.find({}, (err: Error | null, docs: any[]) => {
+      this.db.find({}, (err: Error | null, docs: T[]) => {
         if (err) {
           reject(err);
           return;
         }
-        try {
-          const decryptedDocs = docs
-            .filter(doc => doc && doc.encryptedData)
-            .map(doc => this.decrypt(doc.encryptedData))
-            .filter(doc => doc !== null);
-          resolve(decryptedDocs);
-        } catch (error) {
-          console.error('Error decrypting documents:', error);
-          resolve([]);
-        }
+        resolve(docs);
       });
-    });
-  }
-
-  private applyQueryFilter(doc: any, query: Query): boolean {
-    return Object.entries(query).every(([key, value]) => {
-      if (typeof value === 'object' && value !== null) {
-        const operators = value as QueryOperators;
-        if (operators.$gt !== undefined) return doc[key] > operators.$gt;
-        if (operators.$lt !== undefined) return doc[key] < operators.$lt;
-        if (operators.$gte !== undefined) return doc[key] >= operators.$gte;
-        if (operators.$lte !== undefined) return doc[key] <= operators.$lte;
-        if (operators.$ne !== undefined) return doc[key] !== operators.$ne;
-        if (operators.$in !== undefined) return operators.$in.includes(doc[key]);
-      }
-      return doc[key] === value;
     });
   }
 
   // Find documents by query
   async find<T extends Document>(query: Query): Promise<T[]> {
     return new Promise((resolve, reject) => {
-      this.db.find({}, (err: Error | null, docs: any[]) => {
+      this.db.find(query, (err: Error | null, docs: T[]) => {
         if (err) {
           reject(err);
           return;
         }
-        try {
-          const decryptedDocs = docs
-            .filter(doc => doc && doc.encryptedData)
-            .map(doc => this.decrypt(doc.encryptedData))
-            .filter(doc => doc !== null)
-            .filter(doc => this.applyQueryFilter(doc, query));
-          resolve(decryptedDocs);
-        } catch (error) {
-          console.error('Error finding documents:', error);
-          resolve([]);
-        }
+        resolve(docs);
       });
     });
   }
@@ -252,73 +187,43 @@ class GenericDB {
     };
 
     return new Promise((resolve, reject) => {
-      this.db.findOne({ id }, async (err: Error | null, doc: any) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        if (!doc) {
-          resolve(null);
-          return;
-        }
-        
-        const decryptedDoc = this.decrypt(doc.encryptedData);
-        const updatedDoc = { ...decryptedDoc, ...updateData };
-        const encryptedData = this.encrypt(updatedDoc);
-        
-        this.db.update(
-          { id },
-          { $set: { encryptedData } },
-          { returnUpdatedDocs: true },
-          async (err: Error | null, numAffected: number, affectedDocuments: any) => {
-            if (err) {
-              reject(err);
-              return;
-            }
-            try {
-              await this.syncToFile();
-              resolve(updatedDoc);
-            } catch (error) {
-              reject(error);
-            }
+      this.db.update(
+        { id },
+        { $set: updateData },
+        { returnUpdatedDocs: true },
+        (err: Error | null, numAffected: number, affectedDocuments: T) => {
+          if (err) {
+            reject(err);
+            return;
           }
-        );
-      });
+          resolve(affectedDocuments);
+        }
+      );
     });
   }
 
   // Delete document
   async delete(id: string): Promise<number> {
     return new Promise((resolve, reject) => {
-      this.db.remove({ id }, {}, async (err: Error | null, numRemoved: number) => {
+      this.db.remove({ id }, {}, (err: Error | null, numRemoved: number) => {
         if (err) {
           reject(err);
           return;
         }
-        try {
-          await this.syncToFile();
-          resolve(numRemoved);
-        } catch (error) {
-          reject(error);
-        }
+        resolve(numRemoved);
       });
     });
   }
 
   // Delete multiple documents by query
-  async deleteMany(query: any): Promise<number> {
+  async deleteMany(query: Query): Promise<number> {
     return new Promise((resolve, reject) => {
-      this.db.remove(query, { multi: true }, async (err: Error | null, numRemoved: number) => {
+      this.db.remove(query, { multi: true }, (err: Error | null, numRemoved: number) => {
         if (err) {
           reject(err);
           return;
         }
-        try {
-          await this.syncToFile();
-          resolve(numRemoved);
-        } catch (error) {
-          reject(error);
-        }
+        resolve(numRemoved);
       });
     });
   }
@@ -326,15 +231,12 @@ class GenericDB {
   // Count documents
   async count(query: Query = {}): Promise<number> {
     return new Promise((resolve, reject) => {
-      this.db.find({}, (err: Error | null, docs: any[]) => {
-        if (err) reject(err);
-        else {
-          const count = docs
-            .map(doc => this.decrypt(doc.encryptedData))
-            .filter(doc => this.applyQueryFilter(doc, query))
-            .length;
-          resolve(count);
+      this.db.count(query, (err: Error | null, count: number) => {
+        if (err) {
+          reject(err);
+          return;
         }
+        resolve(count);
       });
     });
   }
