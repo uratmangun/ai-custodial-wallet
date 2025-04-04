@@ -1,6 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createWallet, createWalletParams } from "./tools/create_wallet.js";
+import { createMcpServer } from "./mcp/create_mcp.js";
+import createWalletAction from "./actions/create_wallet";
+import listWalletAction from "./actions/list_wallet";
+import generateSecretAction from "./actions/generate_secret";
 
 // Create server instance
 const server = new McpServer({
@@ -11,13 +14,13 @@ const server = new McpServer({
   },
 });
 
+const actions = {
+  CREATE_WALLET_ACTION: createWalletAction,
+  LIST_WALLET_ACTION: listWalletAction,
+  GENERATE_SECRET_ACTION: generateSecretAction
+};
 
-server.tool(
-  "CREATE_WALLET",
-  "Create a new wallet for a user",
-  createWalletParams,
-  createWallet
-);
+createMcpServer(server, actions);
 
 async function main() {
   const transport = new StdioServerTransport();

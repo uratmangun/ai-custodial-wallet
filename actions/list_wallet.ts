@@ -1,14 +1,14 @@
 import { z } from "zod";
-import { create_wallet } from "../tools";
+import { list_wallet } from "../tools";
 
-const createWalletAction = {
-  name: "CREATE_WALLET_ACTION",
+const listWalletAction = {
+  name: "LIST_WALLET_ACTION",
   similes: [
-    "create wallet",
-    "create new wallet",
+    "list wallet",
+    "list wallets",
     
   ],
-  description: `Create a new EVM wallet.`,
+  description: `List all wallets.`,
   examples: [
     [
       {
@@ -20,7 +20,7 @@ const createWalletAction = {
           createdAt: "2021-01-01T00:00:00.000Z",
           updatedAt: "2021-01-01T00:00:00.000Z"
         },
-        explanation: "Create a new EVM wallet",
+        explanation: "List all wallets",
       },
     ],
    
@@ -29,19 +29,19 @@ const createWalletAction = {
   }),
   handler: async (input: Record<string, any>) => {
     try {
-      const wallet = await create_wallet();
+      const wallets = await list_wallet();
 
       return {
         status: "success",
-        ...wallet
+        ...wallets
       };
     } catch (error) {
       return {
         status: "error",
-        message: error instanceof Error ? error.message : "Failed to create wallet"
+        message: error instanceof Error ? error.message : "Failed to list wallets"
       };
     }
   },
 };
 
-export default createWalletAction;
+export default listWalletAction;
