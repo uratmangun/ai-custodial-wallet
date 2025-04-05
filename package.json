@@ -20,6 +20,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
     "@types/nedb": "^1.8.16",
+    "@zoralabs/coins-sdk": "^0.0.3",
     "dotenv": "^16.4.7",
     "nedb": "^1.8.0",
     "viem": "^2.24.3",

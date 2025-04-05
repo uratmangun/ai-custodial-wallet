@@ -5,7 +5,9 @@ import createWalletAction from "./actions/create_wallet";
 import listWalletAction from "./actions/list_wallet";
 import generateSecretAction from "./actions/generate_secret";
 import checkGasAction from "./actions/check_gas";
-
+import transferFundsAction from "./actions/transfer";
+import getCoinTopGainersAction from "./actions/get_last_traded_coin.js";
+import getCoinAction from "./actions/get_coin";
 // Create server instance
 const server = new McpServer({
   name: "ai-custodial-wallet",
@@ -19,7 +21,10 @@ const actions = {
   CREATE_WALLET_ACTION: createWalletAction,
   LIST_WALLET_ACTION: listWalletAction,
   GENERATE_SECRET_ACTION: generateSecretAction,
-  CHECK_GAS_ACTION: checkGasAction
+  CHECK_GAS_ACTION: checkGasAction,
+  TRANSFER_FUNDS_ACTION: transferFundsAction,
+  GET_COIN_TOP_GAINERS_ACTION: getCoinTopGainersAction,
+  GET_COIN_ACTION: getCoinAction
 };
 
 createMcpServer(server, actions);

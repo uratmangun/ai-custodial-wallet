@@ -50,7 +50,7 @@ const transferFundsAction = {
     toAddress: z.string().refine(isAddress, { message: "Invalid toAddress format." }),
     value: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Value must be a positive number string." })
   }),
-  handler: async (input: { fromAddress: string; toAddress: string; value: string }) => {
+  handler: async (input: Record<string, any>) => {
     try {
       if (!isAddress(input.fromAddress) || !isAddress(input.toAddress)) {
           throw new Error('Invalid sender or recipient address format provided.');
