@@ -4,6 +4,7 @@ import { createMcpServer } from "./mcp/create_mcp.js";
 import createWalletAction from "./actions/create_wallet";
 import listWalletAction from "./actions/list_wallet";
 import generateSecretAction from "./actions/generate_secret";
+import checkGasAction from "./actions/check_gas";
 
 // Create server instance
 const server = new McpServer({
@@ -17,7 +18,8 @@ const server = new McpServer({
 const actions = {
   CREATE_WALLET_ACTION: createWalletAction,
   LIST_WALLET_ACTION: listWalletAction,
-  GENERATE_SECRET_ACTION: generateSecretAction
+  GENERATE_SECRET_ACTION: generateSecretAction,
+  CHECK_GAS_ACTION: checkGasAction
 };
 
 createMcpServer(server, actions);
