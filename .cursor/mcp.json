@@ -9,7 +9,7 @@
         "/home/uratmangun/CascadeProjects/ai-custodial-wallet/index.ts"
       ],
       "env": {
-        "SECRET": ""
+        "SECRET": "e8c4c1a7c3d1106f3851571713d812f6bbf81816748cc14c67d53448140ac31f"
       },
       "transportType": "stdio"
     }

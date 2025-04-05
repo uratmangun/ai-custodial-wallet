@@ -5,7 +5,7 @@ export async function fetchUserBalances(identifier: Address | string,count:numbe
     identifier, // Can also be zora user profile handle
     count,        // Optional: number of balances per page
     after, // Optional: for pagination
-    chainIds: [84532] // base-sepolia chain ID
+    chainIds: [8453] // base-sepolia chain ID
   });
  
   const profile: any = response.data?.profile;

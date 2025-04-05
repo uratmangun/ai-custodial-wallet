@@ -8,6 +8,7 @@ import checkGasAction from "./actions/check_gas";
 import transferFundsAction from "./actions/transfer";
 import getCoinTopGainersAction from "./actions/get_last_traded_coin.js";
 import getCoinAction from "./actions/get_coin";
+import getCoinBalanceAction from "./actions/get_coin_balance";
 // Create server instance
 const server = new McpServer({
   name: "ai-custodial-wallet",
@@ -24,7 +25,8 @@ const actions = {
   CHECK_GAS_ACTION: checkGasAction,
   TRANSFER_FUNDS_ACTION: transferFundsAction,
   GET_COIN_TOP_GAINERS_ACTION: getCoinTopGainersAction,
-  GET_COIN_ACTION: getCoinAction
+  GET_COIN_ACTION: getCoinAction,
+  GET_COIN_BALANCE_ACTION: getCoinBalanceAction,
 };
 
 createMcpServer(server, actions);

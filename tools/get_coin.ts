@@ -3,7 +3,7 @@ import { getCoin } from "@zoralabs/coins-sdk";
 export async function fetchSingleCoin(address: string) {
   const response = await getCoin({
     address,
-    chain: 84532, // Optional: Base Sepolia chain
+    chain: 8453, // Optional: Base Sepolia chain
   });
   
   const coin = response.data?.zora20Token;

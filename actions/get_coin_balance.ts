@@ -52,7 +52,7 @@ const getUserCoinBalanceAction = {
     count: z.number().optional().describe("Number of balances per page (optional). Default is 20."),
     after: z.string().optional().describe("Pagination cursor (optional).")
   }),
-  handler: async (input: { identifier: Address | string; count?: number; after?: string }) => {
+  handler: async (input: Record<string, any>) => {
     try {
       const { identifier, count, after } = input;
       if (!identifier) {
